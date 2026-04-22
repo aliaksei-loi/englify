@@ -19,16 +19,18 @@ Measured on the user's machine (2026-04-22):
 | Metric | Value |
 |---|---|
 | CLI cold-start overhead | ~6 s (Node.js process startup) |
-| Inference time (Haiku) | ~3.3 s |
-| Total latency per hotkey press (spawn-per-call) | ~9–10 s |
+| Inference time (Haiku, with full system prompt) | ~5–6 s |
+| Stdin wait (if `< /dev/null` not redirected) | **+3 s** every call — the CLI waits 3 s for piped stdin that never arrives |
+| Total latency per hotkey press, with `< /dev/null` redirect | **~11–12 s** |
+| Total latency per hotkey press, without redirect | ~14–15 s |
 | Streaming tokens to stdout | **Does not work** — CLI buffers full response |
 | First-call cache creation | ~53k tokens |
-| Warm-call cache read (within 1 h) | ~52k tokens (quota-cheap) |
+| Warm-call cache read (within 1 h) | ~52k tokens (quota-cheap), warm cache creation ~1.5k |
 
 Consequences that this spec accepts:
 
 - **No streaming UX.** The blinking caret / live-token idea from the earlier OpenAI-based design is gone. Popup shows a spinner for the full duration, then the entire result appears at once.
-- **Latency budget: 15 s.** Each hotkey press or chip click can take up to that. Operations below 5 s are considered fast.
+- **Latency budget: 15 s.** Each hotkey press or chip click takes ~11–12 s in practice. Build the UI assuming this; anything under 5 s is considered "fast" for this app.
 - **Quota cost is borne by the user's Claude subscription.** First call per hour pays ~53k cache-creation tokens. Subsequent calls read cache (cheap). Heavy use may hit Team-plan rate limits and temporarily block the widget.
 - **Hard runtime dependency: Claude Code must be installed and the user logged in with a subscription** (not an API key). If either fails, the app surfaces a clear error rather than trying to work around it.
 
@@ -65,11 +67,13 @@ claude -p \
   --tools "" \
   --no-session-persistence \
   --output-format json \
-  "<user input text>"
+  "<user input text>" \
+  < /dev/null
 ```
 
 - Working directory: a temp directory with no `CLAUDE.md` / `.claude/` (avoids auto-loading user context).
-- stdin: unused. Input is passed as the final positional argument.
+- **stdin MUST be redirected to `/dev/null`**. Without it, the CLI waits 3 s for piped stdin that never arrives. In Swift, set `process.standardInput = FileHandle(forReadingAtPath: "/dev/null")` or equivalent. This is a load-bearing detail — forgetting it adds 3 s to every rewrite.
+- Input is passed as the final positional argument (`process.arguments.append(userInput)`).
 - stdout: a single JSON object with `result` (string) and `usage` keys. Parsed in full when the process exits.
 - stderr: captured for error diagnostics.
 - Process timeout: 20 s. On timeout, kill the subprocess, surface a user-facing error.
