@@ -4,24 +4,32 @@ Throwaway code that validates the two riskiest assumptions before any real app c
 
 Plan reference: [Phase 1 in `../plans/englify-plan.md`](../plans/englify-plan.md).
 
-## A — OpenAI SSE streaming (`streaming.swift`)
+## A — Claude CLI subprocess contract (`claude_cli.swift`)
 
-Validates that `URLSession.bytes(for:)` + SSE parsing produces the streaming contract the real app will depend on.
+Validates that shelling out to the `claude` CLI is a viable LLM gateway for the widget: auth detection, result parsing, and cache reuse across calls.
 
 ```sh
-OPENAI_API_KEY=sk-... swift playgrounds/streaming.swift
+swift playgrounds/claude_cli.swift
 ```
 
-Three tests run automatically:
-1. **Normal stream to completion** — expect tokens to print live, ending with `✅ DONE`.
-2. **Cancel at ~500 ms** — expect the stream to stop mid-output with `✅ CANCELLED`.
-3. **Bad key → HTTP 401** — expect `✅ 401 as expected`.
+Four tests run automatically:
+1. **`claude` binary present on PATH.**
+2. **`claude auth status`** returns `loggedIn: true` with `authMethod: "claude.ai"` (subscription). No API-key auth expected.
+3. **Cold subprocess call** with optimized flags (`--disable-slash-commands`, `--tools ""`, `--system-prompt …`, `--no-session-persistence`, `--output-format json`) → valid JSON out → contains `**Improved:**` / `**Changes:**` markers.
+4. **Warm subprocess call** (different input, same system prompt) → cache read dominates cache creation, confirming server-side cache reuse within the 1 h window.
 
 ### Pass criteria
 
-- All three tests hit their `✅` branch.
-- First token of Test 1 appears within ~1 s (anchors the streaming latency budget in the spec).
-- Test 2 cancels cleanly — no leaked tasks, no spew after the cancelled message.
+- Tests 1 and 2 both `✅`.
+- Test 3 produces the expected output format (at minimum the `**Improved:**` marker).
+- Test 4 shows `cache_read_input_tokens` significantly exceeding `cache_creation_input_tokens` (proves warm-call quota savings).
+- Elapsed time is in the ~9–10 s / ~3–5 s API range predicted in SPEC.md. If wildly worse, update SPEC.md Tradeoffs section.
+
+### If this fails
+
+- Binary missing → `claude` isn't installed. Install Claude Code first.
+- Auth wrong → run `claude /login` in a terminal and pick the subscription option.
+- Output format wrong → the prompt needs tuning; iterate on the system prompt before Phase 2.
 
 ## B — Clipboard-swap paste (`paste.swift`)
 
