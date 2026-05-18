@@ -133,6 +133,50 @@ struct ResponseDecoderTests {
         }
     }
 
+    @Test("decodes a refused_russian response with all text fields empty")
+    func decodesRefusedRussian() throws {
+        // The model refuses to act on Russian input without the `[ru]` prefix.
+        // All three text fields are empty by contract; the UI surfaces the
+        // hint instead of attempting to copy.
+        let json = """
+        {
+          "status": "refused_russian",
+          "native": "",
+          "original_marked": "",
+          "mistakes": []
+        }
+        """
+
+        let result = ResponseDecoder.decode(json)
+        let response = try unwrapSuccess(result)
+        #expect(response.status == .refusedRussian)
+        #expect(response.native.isEmpty)
+        #expect(response.originalMarked.isEmpty)
+        #expect(response.mistakes.isEmpty)
+    }
+
+    @Test("decodes a translated_from_ru response with English native and Russian original")
+    func decodesTranslatedFromRu() throws {
+        // `[ru]` escape hatch: native is the English translation, original_marked
+        // echoes the Russian source verbatim (no marks — translation is not
+        // correction), mistakes is empty.
+        let json = """
+        {
+          "status": "translated_from_ru",
+          "native": "I want to say that this is important.",
+          "original_marked": "я хочу сказать что это важно",
+          "mistakes": []
+        }
+        """
+
+        let result = ResponseDecoder.decode(json)
+        let response = try unwrapSuccess(result)
+        #expect(response.status == .translatedFromRu)
+        #expect(response.native == "I want to say that this is important.")
+        #expect(response.originalMarked == "я хочу сказать что это важно")
+        #expect(response.mistakes.isEmpty)
+    }
+
     @Test("unknown status value returns a failure")
     func unknownStatusFails() {
         let json = """

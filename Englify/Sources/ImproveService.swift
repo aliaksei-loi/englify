@@ -26,9 +26,16 @@ final class ImproveService {
     var copyText: String? {
         switch status {
         case .ready(let response):
-            // For both `.rewritten` and `.looksGood`, `native` is what we copy
-            // (the prompt guarantees `looks_good` echoes the input as `native`).
-            return response.native
+            switch response.status {
+            case .rewritten, .looksGood, .translatedFromRu:
+                // `native` is what we copy in all three cases — the prompt
+                // guarantees `looks_good` echoes the input as `native`, and
+                // `translated_from_ru` puts the English translation there.
+                return response.native
+            case .refusedRussian:
+                // Nothing to copy — the UI shows a hint card instead.
+                return nil
+            }
         case .readyRaw(let rawText, _):
             return rawText
         case .idle, .running, .failed:
