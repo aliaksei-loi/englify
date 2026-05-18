@@ -1,25 +1,39 @@
 import Foundation
 import Observation
+import EnglifyKit
 
 /// Owns the input text and the result of the most recent improve call.
 ///
-/// Phase 1 is plain text in, plain text out. No structured decoding yet.
+/// Phase 2 decodes the model's JSON payload into an `ImproveResponse`. When
+/// decoding fails the raw stdout is surfaced through `.readyRaw` so the UI can
+/// show it with a parse-error notice instead of crashing.
 @MainActor
 @Observable
 final class ImproveService {
     enum Status: Equatable {
         case idle
         case running
-        case ready(String)
+        case ready(ImproveResponse)
+        case readyRaw(rawText: String, decodeError: String)
         case failed(String)
     }
 
     var input: String = ""
     private(set) var status: Status = .idle
 
-    var resultText: String? {
-        if case .ready(let text) = status { return text }
-        return nil
+    /// Text that the Copy button should put on the clipboard for the current
+    /// status. `nil` when there is nothing to copy.
+    var copyText: String? {
+        switch status {
+        case .ready(let response):
+            // For both `.rewritten` and `.looksGood`, `native` is what we copy
+            // (the prompt guarantees `looks_good` echoes the input as `native`).
+            return response.native
+        case .readyRaw(let rawText, _):
+            return rawText
+        case .idle, .running, .failed:
+            return nil
+        }
     }
 
     var isRunning: Bool {
@@ -40,10 +54,16 @@ final class ImproveService {
 
         Task { [weak self] in
             do {
-                let output = try await ClaudeSubprocess.run(input: text)
+                let raw = try await ClaudeSubprocess.run(input: text)
+                let decoded = ResponseDecoder.decode(raw)
                 await MainActor.run {
                     guard let self else { return }
-                    self.status = .ready(output)
+                    switch decoded {
+                    case .success(let response):
+                        self.status = .ready(response)
+                    case .failure(let error):
+                        self.status = .readyRaw(rawText: error.rawText, decodeError: error.message)
+                    }
                 }
             } catch {
                 await MainActor.run {

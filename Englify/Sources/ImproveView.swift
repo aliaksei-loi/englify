@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import EnglifyKit
 
 struct ImproveView: View {
     @Bindable var service: ImproveService
@@ -63,23 +64,138 @@ struct ImproveView: View {
         case .failed(let message):
             Text(message)
                 .foregroundStyle(.red)
-        case .ready(let text):
-            VStack(alignment: .leading, spacing: 8) {
-                Divider()
-                ScrollView {
-                    Text(text)
-                        .font(.system(size: 14))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 240)
-                HStack {
-                    Spacer()
-                    Button("Copy") {
-                        onCopy(text)
+        case .ready(let response):
+            readyView(response: response)
+        case .readyRaw(let rawText, _):
+            rawFallbackView(rawText: rawText)
+        }
+    }
+
+    // MARK: - Structured result
+
+    @ViewBuilder
+    private func readyView(response: ImproveResponse) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    switch response.status {
+                    case .looksGood:
+                        looksGoodBadge
+                    case .rewritten:
+                        nativeSection(text: response.native)
                     }
-                    .keyboardShortcut("c", modifiers: [.command, .shift])
+
+                    originalMarkedSection(text: response.originalMarked)
+
+                    if !response.mistakes.isEmpty {
+                        mistakesSection(items: response.mistakes)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 280)
+
+            HStack {
+                Spacer()
+                Button("Copy") {
+                    onCopy(response.native)
+                }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+            }
+        }
+    }
+
+    private var looksGoodBadge: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark.seal.fill")
+                .foregroundStyle(.green)
+            Text("No changes needed")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.green)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.green.opacity(0.12))
+        )
+    }
+
+    private func nativeSection(text: String) -> some View {
+        // Primary surface — largest weight; this is what Copy targets.
+        Text(text)
+            .font(.system(size: 16))
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func originalMarkedSection(text: String) -> some View {
+        // Secondary surface — markdown-bolded error spans. Fall back to plain
+        // text if AttributedString rejects the markdown for any reason.
+        let rendered: AttributedString = {
+            if let attributed = try? AttributedString(markdown: text) {
+                return attributed
+            }
+            return AttributedString(text)
+        }()
+
+        return VStack(alignment: .leading, spacing: 4) {
+            sectionLabel("Original")
+            Text(rendered)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func mistakesSection(items: [String]) -> some View {
+        // Lowest visual weight — compact bullets.
+        VStack(alignment: .leading, spacing: 2) {
+            sectionLabel("Mistakes")
+            ForEach(items, id: \.self) { item in
+                Text("• \(item)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.tertiary)
+            .textCase(.uppercase)
+    }
+
+    // MARK: - Raw fallback
+
+    @ViewBuilder
+    private func rawFallbackView(rawText: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text("Parse error — showing raw response")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.orange)
+            }
+            ScrollView {
+                Text(rawText)
+                    .font(.system(size: 13))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 240)
+            HStack {
+                Spacer()
+                Button("Copy") {
+                    onCopy(rawText)
+                }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
             }
         }
     }

@@ -1,17 +1,16 @@
 import Foundation
+import EnglifyKit
 
 /// Spawns the `claude` CLI in headless print mode.
 ///
-/// Phase 1: single non-streaming response, plain-text output, fresh session
-/// per call. Stderr is captured but no specific error UX is wired yet.
+/// Phase 2: prompt asks for JSON; transport stays plain-text stdout — the JSON
+/// is just the content of that text. Decoding happens in `EnglifyKit`'s
+/// `ResponseDecoder`. Fresh `--session-id` per call (no cross-call memory).
+/// Stderr is captured but no specific error UX is wired yet.
 enum ClaudeSubprocess {
     static let defaultModel = "claude-sonnet-4-6"
 
-    static let systemPrompt = """
-    You rewrite the user's English to sound native. Preserve their meaning, confidence, and directness. \
-    Fix grammar, articles, tense, agreement, idiom, and word choice. Do not hedge, do not soften, do not add corporate filler. \
-    Return only the rewritten text — no preamble, no quotes, no explanation.
-    """
+    static let systemPrompt = SystemPrompt.v2_structured
 
     struct RunError: Error, CustomStringConvertible {
         let exitCode: Int32
@@ -23,7 +22,8 @@ enum ClaudeSubprocess {
     }
 
     /// Run `claude -p` with the supplied user text on stdin. Returns the
-    /// trimmed stdout body. Throws `RunError` on non-zero exit.
+    /// trimmed stdout body (expected to be a JSON object — see
+    /// `SystemPrompt.v2_structured`). Throws `RunError` on non-zero exit.
     static func run(input: String, model: String = defaultModel) async throws -> String {
         try await Task.detached(priority: .userInitiated) {
             try runBlocking(input: input, model: model)

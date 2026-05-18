@@ -10,6 +10,8 @@ packages:
   HotKey:
     url: https://github.com/soffes/HotKey
     from: "0.2.0"
+  EnglifyKit:
+    path: EnglifyKit
 
 settings:
   base:
@@ -41,3 +43,4 @@ targets:
         COMBINE_HIDPI_IMAGES: YES
     dependencies:
       - package: HotKey
+      - package: EnglifyKit
