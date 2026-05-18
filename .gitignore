@@ -1,0 +1,26 @@
+# Xcode
+*.xcodeproj/
+!*.xcodeproj/project.yml
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Generated
+*.app
+
+# Logs
+*.log
