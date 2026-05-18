@@ -13,6 +13,12 @@ struct ImproveView: View {
         VStack(alignment: .leading, spacing: 12) {
             inputField
 
+            if service.input.count >= 5000 {
+                Text("Long input — response may be slow (5000+ chars)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             HStack {
                 Spacer()
                 if service.isRunning {
@@ -61,9 +67,8 @@ struct ImproveView: View {
         case .running:
             Text("Improving…")
                 .foregroundStyle(.secondary)
-        case .failed(let message):
-            Text(message)
-                .foregroundStyle(.red)
+        case .failed(let mode):
+            failureCard(mode: mode)
         case .ready(let response):
             readyView(response: response)
         case .readyRaw(let rawText, _):
@@ -231,6 +236,121 @@ struct ImproveView: View {
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.tertiary)
             .textCase(.uppercase)
+    }
+
+    // MARK: - Failure cards
+
+    @ViewBuilder
+    private func failureCard(mode: FailureMode) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            switch mode {
+            case .cliNotFound:
+                failureBody(
+                    icon: "exclamationmark.triangle.fill",
+                    tint: .orange,
+                    title: "Claude Code not installed",
+                    body: "Install Claude Code: claude.ai/code",
+                    actions: [
+                        FailureAction(label: "Copy link") {
+                            let pb = NSPasteboard.general
+                            pb.clearContents()
+                            pb.setString("https://claude.ai/code", forType: .string)
+                        }
+                    ]
+                )
+            case .notAuthenticated:
+                failureBody(
+                    icon: "key.fill",
+                    tint: .orange,
+                    title: "Sign in to Claude Code",
+                    body: "Run `claude` in Terminal once.",
+                    actions: [
+                        FailureAction(label: "Open Terminal") {
+                            NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
+                        }
+                    ]
+                )
+            case .offline:
+                failureBody(
+                    icon: "wifi.slash",
+                    tint: .red,
+                    title: "You're offline.",
+                    body: "Check your connection.",
+                    actions: [
+                        FailureAction(label: "Retry") { service.improve() }
+                    ]
+                )
+            case .timeout:
+                failureBody(
+                    icon: "clock.badge.exclamationmark",
+                    tint: .orange,
+                    title: "Taking too long.",
+                    body: "Retry?",
+                    actions: [
+                        FailureAction(label: "Cancel", role: .cancel) { onDismiss() },
+                        FailureAction(label: "Retry") { service.improve() }
+                    ]
+                )
+            case .unknown(let stderr):
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.octagon.fill")
+                            .foregroundStyle(.red)
+                        Text("Something went wrong")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.red)
+                    }
+                    Text(stderr.isEmpty ? "No error output." : stderr)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    private struct FailureAction: Identifiable {
+        let id = UUID()
+        let label: String
+        var role: ButtonRole? = nil
+        let action: () -> Void
+    }
+
+    private func failureBody(icon: String, tint: Color, title: String, body: String, actions: [FailureAction]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(tint)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(body)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack {
+                Spacer()
+                ForEach(actions) { action in
+                    Button(action.label, role: action.role, action: action.action)
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(tint.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(tint.opacity(0.35), lineWidth: 1)
+        )
     }
 
     // MARK: - Raw fallback

@@ -8,14 +8,14 @@ struct EnglifyApp: App {
     var body: some Scene {
         // No standard windows; the improve panel is summoned by hotkey.
         Settings {
-            EmptyView()
+            SettingsView()
         }
     }
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let hotkey = HotkeyManager()
+    private let hotkey = HotkeyManager.shared
     private let window = ImproveWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {

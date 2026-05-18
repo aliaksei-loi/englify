@@ -4,9 +4,8 @@ import EnglifyKit
 
 /// Owns the input text and the result of the most recent improve call.
 ///
-/// Phase 2 decodes the model's JSON payload into an `ImproveResponse`. When
-/// decoding fails the raw stdout is surfaced through `.readyRaw` so the UI can
-/// show it with a parse-error notice instead of crashing.
+/// Phase 4 swaps `.failed(String)` for `.failed(FailureMode)` so the view can
+/// switch on a typed failure and render per-mode actionable cards.
 @MainActor
 @Observable
 final class ImproveService {
@@ -15,7 +14,7 @@ final class ImproveService {
         case running
         case ready(ImproveResponse)
         case readyRaw(rawText: String, decodeError: String)
-        case failed(String)
+        case failed(FailureMode)
     }
 
     var input: String = ""
@@ -60,22 +59,20 @@ final class ImproveService {
         status = .running
 
         Task { [weak self] in
-            do {
-                let raw = try await ClaudeSubprocess.run(input: text)
-                let decoded = ResponseDecoder.decode(raw)
-                await MainActor.run {
-                    guard let self else { return }
+            let result = await ClaudeSubprocess.run(input: text)
+            await MainActor.run {
+                guard let self else { return }
+                switch result {
+                case .success(let raw):
+                    let decoded = ResponseDecoder.decode(raw)
                     switch decoded {
                     case .success(let response):
                         self.status = .ready(response)
                     case .failure(let error):
                         self.status = .readyRaw(rawText: error.rawText, decodeError: error.message)
                     }
-                }
-            } catch {
-                await MainActor.run {
-                    guard let self else { return }
-                    self.status = .failed("Error")
+                case .failure(let mode):
+                    self.status = .failed(mode)
                 }
             }
         }
